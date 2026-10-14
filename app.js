@@ -13,17 +13,24 @@ const headerStatus = $("#headerStatus"), headerStatusDot = $("#headerStatusDot")
 const transferPanel = $("#transferPanel"), fileInput = $("#fileInput"), sendFileBtn = $("#sendFileBtn");
 const incomingRequest = $("#incomingRequest"), incomingFileInfo = $("#incomingFileInfo");
 const acceptFileBtn = $("#acceptFileBtn"), rejectFileBtn = $("#rejectFileBtn");
+const receiveConfirm = $("#receiveConfirm");
 const progressWrap = $("#progressWrap"), transferStatus = $("#transferStatus"), transferProgress = $("#transferProgress");
 
 let peer = null, dataConnection = null, qrScanner = null, peerReady = false;
 let pendingIncoming = null, pendingOutgoing = null, receivedChunks = [], receivedBytes = 0;
 let localEcdhKeys = null, localPublicKey = null, remotePublicKey = null, sessionAesKey = null, cryptoReady = false;
-let incomingNonce = null, pendingRemoteJwk = null;
+let incomingNonce = null, pendingRemoteJwk = null, cryptoFingerprint = "", fingerprintVerified = false;
 const CHUNK_SIZE = 16 * 1024;
 const MAX_DEMO_FILE_SIZE = 20 * 1024 * 1024; // 20 MB demo cap
 const cryptoStatus = document.createElement("p");
 cryptoStatus.className = "inline-feedback"; cryptoStatus.id = "cryptoStatus"; cryptoStatus.textContent = "Encryption: waiting for connection";
 $(".connection-status").appendChild(cryptoStatus);
+const fingerprintConfirmWrap = document.createElement("label");
+fingerprintConfirmWrap.id = "fingerprintConfirmWrap";
+fingerprintConfirmWrap.style.cssText = "display:none;gap:10px;align-items:flex-start;margin-top:10px;padding:12px;border:1px solid rgba(126,224,220,.35);border-radius:12px;color:inherit;line-height:1.45;";
+fingerprintConfirmWrap.innerHTML = '<input id="fingerprintConfirm" type="checkbox" style="margin-top:4px;flex:0 0 auto"><span>I compared the full encryption fingerprint with the other device through a separate trusted channel and it matches.</span>';
+$(".connection-status").appendChild(fingerprintConfirmWrap);
+const fingerprintConfirm = $("#fingerprintConfirm");
 
 function feedback(message) { inlineFeedback.textContent = message; }
 function setConnectionState(state, message) {
@@ -49,7 +56,14 @@ async function stopCameraScanner() {
   }
   qrReader.hidden = true; stopScanBtn.hidden = true; startScanBtn.hidden = false;
 }
-function resetCryptoState() { localEcdhKeys = null; localPublicKey = null; remotePublicKey = null; sessionAesKey = null; cryptoReady = false; incomingNonce = null; if (cryptoStatus) cryptoStatus.textContent = "Encryption: waiting for connection"; }
+function resetCryptoState() {
+  localEcdhKeys = null; localPublicKey = null; remotePublicKey = null; sessionAesKey = null;
+  cryptoReady = false; cryptoFingerprint = ""; fingerprintVerified = false; incomingNonce = null;
+  if (cryptoStatus) cryptoStatus.textContent = "Encryption: waiting for connection";
+  if (fingerprintConfirm) fingerprintConfirm.checked = false;
+  if (fingerprintConfirmWrap) fingerprintConfirmWrap.style.display = "none";
+  if (sendFileBtn) sendFileBtn.disabled = true;
+}
 function resetTransferUI() {
   pendingIncoming = null; pendingOutgoing = null; receivedChunks = []; receivedBytes = 0;
   incomingRequest.hidden = true; progressWrap.hidden = true;
@@ -184,9 +198,13 @@ async function acceptRemotePublicKey(jwk) {
     const fingerprint = Array.from(digest.slice(0, 8),
       b => b.toString(16).padStart(2, "0").toUpperCase()).join("");
     cryptoReady = true;
-    cryptoStatus.textContent = `Encryption: AES-256-GCM active · compare fingerprint on BOTH devices: ${fingerprint}`;
-    feedback("Encrypted session ready. Compare the fingerprint on both devices before sending files.");
-    sendFileBtn.disabled = false;
+    cryptoFingerprint = fingerprint;
+    fingerprintVerified = false;
+    fingerprintConfirm.checked = false;
+    fingerprintConfirmWrap.style.display = "flex";
+    cryptoStatus.textContent = `Encryption: AES-256-GCM active · fingerprint: ${fingerprint}`;
+    feedback("Compare the fingerprint on both devices using a separate trusted channel, then tick the confirmation box on BOTH devices.");
+    sendFileBtn.disabled = true;
     console.log("[SecureShare] Crypto handshake complete; fingerprint:", fingerprint);
   } catch (error) {
     console.error("[SecureShare] Key agreement failed:", error);
@@ -277,7 +295,7 @@ function handleIncomingData(data) {
   if (!data.type) console.warn("[SecureShare] Incoming object has no message type:", data);
   if (data.type === "crypto-key") { acceptRemotePublicKey(data.key);
   } else if (data.type === "file-request") {
-    if (!cryptoReady) { sendMessage({ type: "file-reject", reason: "Encrypted session is not ready. Reconnect and compare fingerprints." }); return; }
+    if (!cryptoReady || !fingerprintVerified) { sendMessage({ type: "file-reject", reason: "Receiver has not verified the encryption fingerprint. Compare fingerprints on both devices first." }); feedback("File request blocked: verify the encryption fingerprint first."); return; }
     if (!Number.isFinite(data.size) || data.size < 0 || data.size > MAX_DEMO_FILE_SIZE) {
       sendMessage({ type: "file-reject", reason: "This demo accepts files up to 20 MB." });
       feedback("Incoming file was rejected: demo limit is 20 MB."); return;
@@ -391,13 +409,22 @@ startScanBtn.addEventListener("click", async () => {
   }
 });
 stopScanBtn.addEventListener("click", stopCameraScanner);
+fingerprintConfirm.addEventListener("change", () => {
+  fingerprintVerified = Boolean(fingerprintConfirm.checked && cryptoReady && sessionAesKey && cryptoFingerprint);
+  sendFileBtn.disabled = !fingerprintVerified;
+  if (fingerprintVerified) {
+    feedback("Fingerprint confirmation recorded on this device. Ensure the other device has also confirmed the same fingerprint.");
+  } else {
+    feedback("Fingerprint not confirmed. File sending and acceptance are disabled.");
+  }
+});
 
 sendFileBtn.addEventListener("click", () => {
   const file = fileInput.files && fileInput.files[0];
   if (!file) { feedback("Choose a file first."); return; }
   if (file.size > MAX_DEMO_FILE_SIZE) { feedback("Choose a file smaller than 20 MB for this demo."); return; }
   if (!dataConnection || !dataConnection.open) { feedback("Connect the devices first."); return; }
-  if (!cryptoReady || !sessionAesKey) { feedback("Wait until encrypted session is ready and compare the fingerprints on both devices."); return; }
+  if (!cryptoReady || !sessionAesKey || !fingerprintVerified) { feedback("Compare the encryption fingerprint and confirm it using the checkbox before sending."); return; }
   pendingOutgoing = file;
   transferProgress.value = 0; progressWrap.hidden = false;
   transferStatus.textContent = "Transfer request sent. Waiting for receiver approval…";
@@ -409,6 +436,7 @@ sendFileBtn.addEventListener("click", () => {
 });
 acceptFileBtn.addEventListener("click", () => {
   if (!pendingIncoming) return;
+  if (!cryptoReady || !sessionAesKey || !fingerprintVerified) { feedback("Verify the encryption fingerprint before accepting a file."); return; }
   sendMessage({ type: "file-accept" });
   incomingRequest.hidden = true;
   transferStatus.textContent = "Accepted. Waiting for file data…"; progressWrap.hidden = false;

@@ -88,6 +88,10 @@
         <div class="request-box" id="incomingRequest" hidden>
           <strong>Incoming file request</strong>
           <p id="incomingFileInfo"></p>
+          <label id="receiveConfirmWrap" style="display:flex;gap:10px;align-items:flex-start;margin:10px 0;padding:12px;border:1px solid rgba(126,224,220,.35);border-radius:12px;line-height:1.45;">
+            <input id="receiveConfirm" type="checkbox" style="margin-top:4px;flex:0 0 auto">
+            <span>I recognize this file request and want to receive this file.</span>
+          </label>
           <div class="request-actions">
             <button class="action-button" id="acceptFileBtn" type="button">Accept</button>
             <button class="action-button reject-action" id="rejectFileBtn" type="button">Reject</button>
