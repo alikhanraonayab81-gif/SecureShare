@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="SecureShare student prototype for peer-to-peer connectivity and file transfer testing.">
+  <title>SecureShare | Private File Sharing</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="SecureShare home">
+      <span class="brand-mark" aria-hidden="true">S</span>
+      <span>Secure<span class="brand-accent">Share</span></span>
+    </a>
+    <span class="prototype-badge"><span class="status-dot" id="headerStatusDot"></span> <span id="headerStatus">CONNECTING SERVICE</span></span>
+  </header>
+
+  <main class="page-shell">
+    <section class="intro">
+      <p class="eyebrow">PRIVATE FILE TRANSFER</p>
+      <h1>Your files.<br><span>Your choice.</span></h1>
+      <p class="intro-copy">A student project exploring a safer way to share files between two devices, with receiver approval and encrypted file contents using browser cryptography.</p>
+      <div class="trust-points">
+        <span><span class="mini-check">✓</span> Receiver approval</span>
+        <span><span class="mini-check">✓</span> Peer-to-peer transfer demo</span>
+        <span><span class="mini-check">✓</span> You control the session</span>
+      </div>
+    </section>
+
+    <section class="connect-card" aria-labelledby="connect-title">
+      <div class="card-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M8.5 8.5 15.5 15.5M15.5 8.5 8.5 15.5M12 3v18M7 6l10 12-5 3V3l5 3L7 18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <p class="eyebrow card-eyebrow">STEP 01</p>
+      <h2 id="connect-title">Establish connection</h2>
+      <p class="card-copy">Open this page on two devices. One device creates an ID; the other enters it to connect.</p>
+      <div class="pairing-options">
+        <button class="option-button primary-option" id="generateBtn" type="button">
+          <span class="option-icon" aria-hidden="true">▦</span>
+          <span class="option-text"><strong>Start as sender</strong><small>Generate your Peer ID</small></span>
+          <span class="option-arrow" aria-hidden="true">→</span>
+        </button>
+        <button class="option-button" id="scanBtn" type="button">
+          <span class="option-icon scan-icon" aria-hidden="true">⌗</span>
+          <span class="option-text"><strong>Start as receiver</strong><small>Enter the sender's Peer ID</small></span>
+          <span class="option-arrow" aria-hidden="true">→</span>
+        </button>
+      </div>
+
+      <div class="inline-panel" id="pairingPanel" hidden>
+        <div class="panel-topline">
+          <strong id="panelTitle">Your connection ID</strong>
+          <button class="text-button" id="closePanelBtn" type="button">Close</button>
+        </div>
+        <p id="panelDescription">Keep this page open while the other device connects.</p>
+        <div class="peer-id-box" id="peerIdBox" hidden><code id="peerIdText"></code><button class="action-button secondary-action" id="copyIdBtn" type="button">Copy ID</button></div>
+        <div class="qr-demo-wrap" id="qrDemoWrap" hidden>
+          <div class="qr-canvas" id="qrCanvas" aria-label="Peer ID QR code"></div>
+          <p class="qr-caption">This QR contains your Peer ID. Share it only with the intended receiver.</p>
+        </div>
+        <label class="field-label" for="pairCodeInput" id="pairCodeLabel" hidden>Sender's Peer ID</label>
+        <input id="pairCodeInput" class="code-input" type="text" placeholder="Paste sender's Peer ID" autocomplete="off" maxlength="120" hidden>
+        <div class="qr-scan-note" id="qrScanNote" hidden>
+          <strong>Optional: scan the sender's QR code</strong>
+          <p>Camera scanning usually requires HTTPS or localhost. If scanning doesn't work, paste the Peer ID manually.</p>
+          <div id="qrReader" class="qr-reader" hidden></div>
+          <button class="action-button secondary-action" id="startScanBtn" type="button">Open camera scanner</button>
+          <button class="text-button" id="stopScanBtn" type="button" hidden>Stop camera</button>
+        </div>
+        <button class="action-button" id="continueBtn" type="button" hidden>Connect</button>
+        <p class="inline-feedback" id="inlineFeedback" role="status" aria-live="polite"></p>
+      </div>
+
+      <div class="connection-status" aria-live="polite">
+        <span class="status-pill" id="connectionPill">Not connected</span>
+        <p id="connectionMessage">Start as sender on one device and receiver on the other.</p>
+        <button class="action-button secondary-action" id="disconnectBtn" type="button" hidden>Disconnect</button>
+      </div>
+
+      <section class="transfer-panel" id="transferPanel" hidden aria-labelledby="transferTitle">
+        <p class="eyebrow">STEP 02</p>
+        <h2 id="transferTitle">Share a file</h2>
+        <p class="card-copy">Choose a small test file. The receiver must approve it before transfer begins.</p>
+        <label class="field-label" for="fileInput">Select file to send</label>
+        <input id="fileInput" class="file-input" type="file">
+        <button class="action-button" id="sendFileBtn" type="button">Request file transfer</button>
+        <div class="request-box" id="incomingRequest" hidden>
+          <strong>Incoming file request</strong>
+          <p id="incomingFileInfo"></p>
+          <div class="request-actions">
+            <button class="action-button" id="acceptFileBtn" type="button">Accept</button>
+            <button class="action-button reject-action" id="rejectFileBtn" type="button">Reject</button>
+          </div>
+        </div>
+        <div class="progress-wrap" id="progressWrap" hidden>
+          <p id="transferStatus" role="status" aria-live="polite">Preparing transfer…</p>
+          <progress id="transferProgress" value="0" max="100"></progress>
+        </div>
+        <p class="transfer-warning"><strong>Testing only:</strong> file contents are encrypted with AES-GCM. Compare the encryption fingerprint on both devices before sending. This student prototype is not security-audited; use test files only.</p>
+      </section>
+
+      <div class="security-note">
+        <span class="note-icon" aria-hidden="true">i</span>
+        <p><strong>Prototype status:</strong> connection and basic file transfer are demo milestones. This prototype uses ECDH key agreement and AES-256-GCM file encryption. Fingerprint comparison is a manual identity check; this prototype is not independently audited or production-ready.</p>
+      </div>
+    </section>
+
+    <section class="next-steps" aria-label="Project workflow">
+      <p class="eyebrow">PROJECT MILESTONES</p>
+      <div class="workflow">
+        <div class="workflow-step active"><span>01</span><strong>Connect</strong></div>
+        <span class="workflow-line"></span>
+        <div class="workflow-step active"><span>02</span><strong>Approve transfer</strong></div>
+        <span class="workflow-line"></span>
+        <div class="workflow-step"><span>03</span><strong>Encrypt files</strong></div>
+        <span class="workflow-line"></span>
+        <div class="workflow-step"><span>04</span><strong>Transfer securely</strong></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>SecureShare · First-year B.Tech project</span>
+    <span>Learning prototype — not for confidential files</span>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
